@@ -1,0 +1,9 @@
+*.o
+/droidian-apex
+/tests/test-manifest
+/generated_config.yml
+/debian/.debhelper/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.debhelper
+/debian/*.substvars

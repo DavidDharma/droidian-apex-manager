@@ -1,0 +1,24 @@
+Source: droidian-apex-manager
+Section: admin
+Priority: optional
+Maintainer: Erik Inkinen <erik.inkinen@erikinkinen.fi>
+Build-Depends: debhelper-compat (= 13),
+               python3,
+               zlib1g-dev
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/droidian/droidian-apex-manager
+Vcs-Browser: https://github.com/droidian/droidian-apex-manager
+Vcs-Git: https://github.com/droidian/droidian-apex-manager.git
+
+Package: droidian-apex-manager
+Architecture: linux-any
+Depends: lxc,
+         ${misc:Depends},
+         ${shlibs:Depends}
+Recommends: lxc-android
+Description: APEX management for Droidian's Android container
+ This utility discovers flattened, packaged, and compressed Android APEX
+ modules before apexd starts. It can mount modules directly, wait for apexd in
+ the Halium LXC container, mirror live APEX mounts to the host, and report
+ detailed porting diagnostics.

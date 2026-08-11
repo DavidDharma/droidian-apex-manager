@@ -1,0 +1,135 @@
+.TH DROIDIAN-APEX 8 "August 2026" "droidian-apex 0.1.0" "System Administration"
+.SH NAME
+droidian-apex \- manage Android APEX modules for Droidian
+.SH SYNOPSIS
+.B droidian-apex
+.RI [ options ]
+.I command
+.RI [ arguments ]
+.SH DESCRIPTION
+.B droidian-apex
+discovers Android Pony EXpress modules before apexd starts, mounts flattened or
+packaged modules, and mirrors apexd's live mounts from a Halium LXC container to
+the Droidian host.
+.PP
+Discovery does not require the container to be running. By default the program
+searches APEX directories below
+.IR /android/system ,
+.IR /android/system_ext ,
+.IR /android/product ,
+.IR /android/vendor ,
+.IR /android/odm ,
+and
+.IR /android/data/apex/active .
+.SH OPTIONS
+.TP
+.BR \-a ", " \-\-android-root =PATH
+Use PATH as the root containing Android partitions. The default is
+.BR /android .
+.TP
+.BR \-m ", " \-\-mount-root =PATH
+Use PATH for host APEX mounts. The default is
+.BR /apex .
+.TP
+.BR \-c ", " \-\-container =NAME
+Use the named LXC container. The default is
+.BR android .
+.TP
+.BR \-t ", " \-\-timeout =SECONDS
+Set the apexd wait timeout. The default is 60 seconds.
+.TP
+.BR \-n ", " \-\-dry-run
+Inspect packages and print mount operations without changing mounts.
+.TP
+.BR \-v ", " \-\-verbose
+Print discovery, container, and property state transitions.
+.TP
+.BR \-V ", " \-\-version
+Print the program version.
+.SH COMMANDS
+.TP
+.BR list " [" \-\-json "] [" ROOT " ...]"
+Enumerate flattened directories, packaged APEXs, and compressed APEXs. Explicit
+roots may be an APEX source directory, a directory containing APEXs, or an APEX
+file. This command never contacts apexd.
+.TP
+.BR mount " [" \-\-all " | " PATH " ...]"
+Mount the highest version of each module. Flattened modules use read-only bind
+mounts. Packaged modules use read-only loop mounts, with automatic ext4/EROFS
+detection. Compressed APEXs are unpacked transiently. This command requires
+root unless
+.B \-\-dry-run
+is used.
+.TP
+.B prepare
+Alias for
+.BR "mount --all" .
+.TP
+.BR wait " [started|activated|ready]"
+Wait for the container and the requested apexd property state. Later states
+satisfy waits for earlier states. The default is
+.BR ready .
+.TP
+.B status
+Print LXC state, init PID, and the value of
+.BR apexd.status .
+.TP
+.B sync
+Wait for apexd to become ready, locate the container mount namespace through
+.IR /proc/PID/root/apex ,
+and read-only bind the canonical module paths to the host APEX root. This is the
+preferred command for lxc-android startup integration.
+.TP
+.BR apexd " status"
+Show container and apexd state.
+.TP
+.BR apexd " wait [STATE]"
+Wait for apexd. Equivalent to the top-level
+.B wait
+command.
+.TP
+.BR apexd " dump [ARG ...]"
+Run
+.B dumpsys apexservice
+inside the container and pass through any additional dumpsys arguments.
+.TP
+.B diagnose
+Report configuration, required device nodes and filesystems, mount state, LXC
+state, apexd status, and every pre-start APEX candidate.
+.SH ENVIRONMENT
+.TP
+.B DROIDIAN_APEX_ANDROID_ROOT
+Default Android partition root.
+.TP
+.B DROIDIAN_APEX_MOUNT_ROOT
+Default host APEX mount root.
+.TP
+.B DROIDIAN_APEX_CONTAINER
+Default LXC container name.
+.TP
+.B DROIDIAN_APEX_TIMEOUT
+Default wait timeout in seconds.
+.SH SECURITY
+The direct
+.B mount
+command parses and mounts payloads but does not implement apexd signature or
+dm-verity verification. Use it only with trusted APEXs from Android's verified,
+read-only partitions. For the normal boot path, use
+.BR sync ,
+which mirrors mounts already activated and verified by apexd.
+.SH EXIT STATUS
+Zero indicates success, one indicates an operational failure or timeout, and
+two indicates invalid command-line usage.
+.SH FILES
+.TP
+.B /usr/sbin/droidian-apex
+Program executable.
+.TP
+.B /run/droidian-apex-manager
+Short-lived extraction files used while mounting compressed payloads.
+.SH SEE ALSO
+.BR lxc-attach (1),
+.BR lxc-info (1),
+.BR mount (8)
+.SH AUTHOR
+Erik Inkinen <erik.inkinen@erikinkinen.fi>
