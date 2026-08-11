@@ -322,6 +322,7 @@ static void print_json_string(const char *value)
 int apex_print_list(const struct apex_list *list, bool json)
 {
 	size_t index;
+	int version_width = 8;
 
 	if (json) {
 		fputs("[\n", stdout);
@@ -343,12 +344,19 @@ int apex_print_list(const struct apex_list *list, bool json)
 		fputs("]\n", stdout);
 		return 0;
 	}
-	printf("%-11s %-8s %-36s %s\n", "TYPE", "VERSION", "NAME", "SOURCE");
+	for (index = 0; index < list->count; index++) {
+		int width = snprintf(NULL, 0, "%" PRIu64, list->items[index].version);
+
+		if (width > version_width)
+			version_width = width;
+	}
+	printf("%-11s %-*s %-36s %s\n", "TYPE", version_width, "VERSION",
+		"NAME", "SOURCE");
 	for (index = 0; index < list->count; index++) {
 		const struct apex_item *item = &list->items[index];
 
-		printf("%-11s %-8" PRIu64 " %-36s %s%s%s%s\n",
-			apex_kind_name(item->kind), item->version, item->name,
+		printf("%-11s %-*" PRIu64 " %-36s %s%s%s%s\n",
+			apex_kind_name(item->kind), version_width, item->version, item->name,
 			item->source, item->error[0] ? "  [" : "",
 			item->error[0] ? item->error : "",
 			item->error[0] ? "]" : "");

@@ -32,7 +32,7 @@ def make_apex(path, name, version):
         archive.writestr("apex_payload.img", payload,
                          compress_type=zipfile.ZIP_STORED)
 
-make_apex(root / "com.example.packaged.apex", "com.example.packaged", 11)
+make_apex(root / "com.example.packaged.apex", "com.example.packaged", 350090000)
 nested = io.BytesIO()
 with zipfile.ZipFile(nested, "w") as archive:
     archive.writestr("apex_manifest.json",
@@ -49,13 +49,21 @@ with zipfile.ZipFile(root / "com.example.compressed.capex", "w") as archive:
 PY
 
 output=$($project_dir/droidian-apex --android-root "$temporary_dir" list)
-printf '%s\n' "$output" | grep -q 'packaged.*11.*com.example.packaged'
+printf '%s\n' "$output" | grep -q 'packaged.*350090000.*com.example.packaged'
 printf '%s\n' "$output" | grep -q 'compressed.*12.*com.example.compressed'
+printf '%s\n' "$output" | awk '
+	NR == 1 { name_column = index($0, "NAME"); next }
+	{
+		if (index($0, $3) != name_column)
+			exit 1
+	}
+	END { if (!name_column) exit 1 }
+'
 
 output=$($project_dir/droidian-apex --dry-run --mount-root "$temporary_dir/mnt" \
 	mount "$temporary_dir/system/apex/com.example.packaged.apex")
 printf '%s\n' "$output" | grep -q 'loop-mount.*type=ext4'
-printf '%s\n' "$output" | grep -q 'bind.*com.example.packaged@11.*com.example.packaged'
+printf '%s\n' "$output" | grep -q 'bind.*com.example.packaged@350090000.*com.example.packaged'
 
 output=$($project_dir/droidian-apex --dry-run --mount-root "$temporary_dir/mnt" \
 	mount "$temporary_dir/system/apex/com.example.compressed.capex")
