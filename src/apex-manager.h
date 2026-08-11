@@ -12,7 +12,7 @@
 #endif
 
 #define APEX_NAME_MAX 255
-#define APEX_VERSION "0.1.0"
+#define APEX_VERSION "1.0.1"
 
 enum apex_kind {
 	APEX_FLATTENED,
