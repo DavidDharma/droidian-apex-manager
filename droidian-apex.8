@@ -91,7 +91,11 @@ command.
 .BR apexd " dump [ARG ...]"
 Run
 .B dumpsys apexservice
-inside the container and pass through any additional dumpsys arguments.
+inside the container. If its active-package section is empty, append a package
+list derived from the container's live
+.B /apex
+mounts. Any additional dumpsys arguments are passed through unchanged and
+disable this fallback.
 .TP
 .B diagnose
 Report configuration, required device nodes and filesystems, mount state, LXC

@@ -74,6 +74,12 @@ droidian-apex status
 droidian-apex apexd dump
 ```
 
+On some Halium ports, `dumpsys apexservice` reaches the service but its
+in-memory active-package list is empty. When that happens, `apexd dump` keeps
+the native output and appends a `MOUNTED PACKAGES` section derived from the
+container's live `/apex` namespace. Additional dumpsys arguments disable this
+fallback and are passed through unchanged.
+
 All global settings also have environment forms:
 `DROIDIAN_APEX_ANDROID_ROOT`, `DROIDIAN_APEX_MOUNT_ROOT`,
 `DROIDIAN_APEX_CONTAINER`, and `DROIDIAN_APEX_TIMEOUT`.

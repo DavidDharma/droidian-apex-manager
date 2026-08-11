@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -143,7 +144,7 @@ int apexd_wait(const struct apex_options *options, const char *wanted)
 	}
 }
 
-int apexd_dump(const struct apex_options *options, int argc, char **argv)
+static int run_dumpsys(const struct apex_options *options, int argc, char **argv)
 {
 	char **arguments;
 	int index;
@@ -166,6 +167,132 @@ int apexd_dump(const struct apex_options *options, int argc, char **argv)
 		apex_log("error", "could not run dumpsys in container %s",
 			options->container);
 	return result;
+}
+
+static bool dump_has_active_packages(const char *dump)
+{
+	const char *packages = strstr(dump, "ACTIVE PACKAGES:");
+
+	if (!packages)
+		return false;
+	packages += strlen("ACTIVE PACKAGES:");
+	while (*packages == ' ' || *packages == '\t' ||
+	       *packages == '\r' || *packages == '\n')
+		packages++;
+	return *packages && strncmp(packages, "SESSIONS:", strlen("SESSIONS:")) != 0;
+}
+
+static size_t print_live_packages(const struct apex_list *list)
+{
+	size_t index;
+	size_t printed = 0;
+	int version_width = 8;
+	char last_name[APEX_NAME_MAX + 1] = "";
+	uint64_t last_version = 0;
+	bool have_last = false;
+
+	for (index = 0; index < list->count; index++) {
+		int width;
+
+		if (!list->items[index].name[0] || list->items[index].error[0])
+			continue;
+		width = snprintf(NULL, 0, "%" PRIu64, list->items[index].version);
+		if (width > version_width)
+			version_width = width;
+	}
+	printf("%-*s %-36s %s\n", version_width, "VERSION", "NAME", "MOUNT");
+	for (index = 0; index < list->count; index++) {
+		const struct apex_item *item = &list->items[index];
+		const char *base;
+
+		if (!item->name[0] || item->error[0])
+			continue;
+		if (have_last && item->version == last_version &&
+		    strcmp(item->name, last_name) == 0)
+			continue;
+		base = strrchr(item->source, '/');
+		base = base ? base + 1 : item->source;
+		printf("%-*" PRIu64 " %-36s /apex/%s\n", version_width,
+			item->version, item->name, base);
+		snprintf(last_name, sizeof(last_name), "%s", item->name);
+		last_version = item->version;
+		have_last = true;
+		printed++;
+	}
+	return printed;
+}
+
+static int dump_live_packages(const struct apex_options *options)
+{
+	struct apex_list list;
+	char container_apex[PATH_MAX];
+	char *root;
+	pid_t pid;
+	int result;
+	int path_size = -1;
+
+	apex_list_init(&list);
+	if (container_get_pid(options, &pid) == 0)
+		path_size = snprintf(container_apex, sizeof(container_apex),
+			"/proc/%ld/root/apex", (long)pid);
+	if (path_size >= 0 && path_size < (int)sizeof(container_apex))
+		root = container_apex;
+	else
+		root = (char *)options->mount_root;
+	result = apex_discover(options, 1, &root, &list);
+	if ((result < 0 || !list.count) && root == container_apex) {
+		apex_list_free(&list);
+		apex_list_init(&list);
+		root = (char *)options->mount_root;
+		result = apex_discover(options, 1, &root, &list);
+	}
+	if (result < 0) {
+		apex_list_free(&list);
+		return -1;
+	}
+	puts("\nMOUNTED PACKAGES (live /apex fallback):");
+	if (!print_live_packages(&list))
+		puts("(none found)");
+	apex_list_free(&list);
+	return 0;
+}
+
+int apexd_dump(const struct apex_options *options, int argc, char **argv)
+{
+	char *arguments[] = {
+		"lxc-attach", "-n", (char *)options->container, "--",
+		"/system/bin/dumpsys", "apexservice", NULL
+	};
+	char *dump;
+	int exit_status;
+	int result;
+	size_t dump_size = 1024 * 1024;
+
+	if (argc)
+		return run_dumpsys(options, argc, argv);
+	dump = malloc(dump_size);
+	if (!dump)
+		return -1;
+	result = run_capture(arguments, dump, dump_size, &exit_status);
+	if (result < 0) {
+		free(dump);
+		return -1;
+	}
+	if (dump[0]) {
+		fputs(dump, stdout);
+		if (dump[strlen(dump) - 1] != '\n')
+			putchar('\n');
+	}
+	if (exit_status != 0) {
+		free(dump);
+		errno = EIO;
+		return exit_status;
+	}
+	if (!dump_has_active_packages(dump) && dump_live_packages(options) < 0)
+		apex_log("warning", "cannot inspect live APEX mounts: %s",
+			strerror(errno));
+	free(dump);
+	return 0;
 }
 
 static int sync_bind(const char *source, const char *target, bool file,

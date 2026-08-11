@@ -82,7 +82,12 @@ printf '%s\n' \
 	'#!/bin/sh' \
 	'case " $* " in' \
 	'  *" /system/bin/getprop apexd.status "*) printf "%s\n" ready ;;' \
-	'  *" /system/bin/dumpsys apexservice "*) printf "%s\n" "apexservice dump" ;;' \
+	'  *" /system/bin/dumpsys apexservice "*)' \
+	'    if [ "${DROIDIAN_TEST_EMPTY_DUMP:-}" = 1 ]; then' \
+	'      printf "%s\n" "ACTIVE PACKAGES:" "SESSIONS:"' \
+	'    else' \
+	'      printf "%s\n" "ACTIVE PACKAGES:" "Package: com.example.native" "SESSIONS:"' \
+	'    fi ;;' \
 	'  *) exit 2 ;;' \
 	'esac' > "$fake_bin/lxc-attach"
 chmod 0755 "$fake_bin/lxc-info" "$fake_bin/lxc-attach"
@@ -96,6 +101,18 @@ printf '%s\n' "$status" | grep -q "^container.pid=$$\$"
 printf '%s\n' "$status" | grep -q '^apexd.status=ready$'
 dump=$(DROIDIAN_TEST_PID=$$ PATH="$fake_bin:$PATH" \
 	$project_dir/droidian-apex apexd dump --proto)
-printf '%s\n' "$dump" | grep -q '^apexservice dump$'
+printf '%s\n' "$dump" | grep -q '^Package: com.example.native$'
+dump=$(DROIDIAN_TEST_PID=$$ PATH="$fake_bin:$PATH" \
+	$project_dir/droidian-apex apexd dump)
+printf '%s\n' "$dump" | grep -q '^Package: com.example.native$'
+if printf '%s\n' "$dump" | grep -q '^MOUNTED PACKAGES'; then
+	echo "live-mount fallback unexpectedly used for a populated dump" >&2
+	exit 1
+fi
+dump=$(DROIDIAN_TEST_PID=$$ DROIDIAN_TEST_EMPTY_DUMP=1 PATH="$fake_bin:$PATH" \
+	$project_dir/droidian-apex \
+	--mount-root "$project_dir/tests/fixtures/android/system/apex" apexd dump)
+printf '%s\n' "$dump" | grep -q '^MOUNTED PACKAGES (live /apex fallback):$'
+printf '%s\n' "$dump" | grep -q '7.*com.example.flattened.*/apex/com.example.flattened'
 
 echo "CLI tests passed"
