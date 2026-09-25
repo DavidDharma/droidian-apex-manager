@@ -60,7 +60,11 @@ int apexd_get_status(const struct apex_options *options, char *status,
 {
 	char *arguments[] = {
 		"lxc-attach", "-n", (char *)options->container, "--",
-		"/system/bin/getprop", "apexd.status", NULL
+		/* The empty default is what getprop prints for an unset property
+		 * anyway. It also keeps the property name in place on devices whose
+		 * lxc-attach drops the command's last argument, where a bare
+		 * getprop printed every property and apexd never read "ready". */
+		"/system/bin/getprop", "apexd.status", "", NULL
 	};
 	int exit_status;
 
