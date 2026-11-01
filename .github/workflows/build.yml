@@ -1,0 +1,61 @@
+name: Build droidian-apex-manager package
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build droidian-apex-manager package
+        run: |
+          mkdir -p /tmp/results
+
+          docker run --rm -i \
+            -v ${PWD}:/buildd/sources \
+            -v /tmp/results:/buildd \
+            --cap-add=SYS_ADMIN \
+            --security-opt apparmor:unconfined \
+            --security-opt seccomp=unconfined \
+            quay.io/droidian/build-essential:bookworm-amd64 bash << 'EOF'
+
+          rm -f /etc/apt/sources.list.d/*mobian*
+
+          cat << 'INNER_EOF' > /etc/apt/apt.conf.d/99-ignore-gpg
+          APT::Get::AllowUnauthenticated "true";
+          Acquire::AllowInsecureRepositories "true";
+          Acquire::AllowDowngradeToInsecureRepositories "true";
+          Acquire::AllowWeakRepositories "true";
+          INNER_EOF
+
+          echo "Trusted: yes" >> /etc/apt/sources.list.d/droidian.sources
+          sed -i 's/^deb /deb [trusted=yes] /' /etc/apt/sources.list.d/*.list
+
+          apt-get update
+          apt-get install binutils-aarch64-linux-gnu
+
+          cd /buildd/sources
+          chmod +x debian/rules
+          RELENG_HOST_ARCH=arm64 releng-build-package
+          EOF
+
+          sudo chown -R $USER:$USER /tmp/results || true
+          
+      - name: Delete latest release
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "latest"
+          name: "Latest droidian-apex-manager build"
+          files: /tmp/results/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
