@@ -6,46 +6,60 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+
     steps:
-      - name: Checkout
+      - name: Checkout sources
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Build droidian-apex-manager package
+      - name: Create output directory
+        run: mkdir -p buildd-results
+
+      - name: Build package
         run: |
-          mkdir -p /tmp/results
+          docker pull quay.io/droidian/build-essential:current-arm64
 
-          docker run --rm -i \
-            -v ${PWD}:/buildd/sources \
-            -v /tmp/results:/buildd \
-            --cap-add=SYS_ADMIN \
-            --security-opt apparmor:unconfined \
-            --security-opt seccomp=unconfined \
-            quay.io/droidian/build-essential:bookworm-amd64 bash << 'EOF'
-
-          rm -f /etc/apt/sources.list.d/*mobian*
-
-          cat << 'INNER_EOF' > /etc/apt/apt.conf.d/99-ignore-gpg
-          APT::Get::AllowUnauthenticated "true";
-          Acquire::AllowInsecureRepositories "true";
-          Acquire::AllowDowngradeToInsecureRepositories "true";
-          Acquire::AllowWeakRepositories "true";
-          INNER_EOF
-
-          echo "Trusted: yes" >> /etc/apt/sources.list.d/droidian.sources
-          sed -i 's/^deb /deb [trusted=yes] /' /etc/apt/sources.list.d/*.list
-
-          apt-get update
-          apt-get install binutils-aarch64-linux-gnu
-          apt-get install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
-          cd /buildd/sources
-          chmod +x debian/rules
-          RELENG_HOST_ARCH=arm64 releng-build-package
-          EOF
-
-          sudo chown -R $USER:$USER /tmp/results || true
-          
+          docker run --rm \
+            -e CI \
+            -e IS_CONTAINER=true \
+            -e CIRCLECI=true \
+            -e CIRCLE_BRANCH="${{ github.ref_name }}" \
+            -e CIRCLE_SHA1="${{ github.sha }}" \
+            -e CIRCLE_TAG="${{ github.ref_type == 'tag' && github.ref_name || '' }}" \
+            -e RELENG_HOST_ARCH=arm64 \
+            -v "${{ github.workspace }}:/buildd/sources" \
+            -v "${{ github.workspace }}/buildd-results:/buildd" \
+            quay.io/droidian/build-essential:current-arm64 \
+            /bin/bash -lc '
+              cd /buildd/sources
+              git config --global --add safe.directory /buildd/sources
+              echo "=== BEFORE BUILD ==="
+              git describe --tags --always || true
+              // git tag -l 'upstream/*' || true
+              // git rev-parse upstream/0.47.0 || true
+              echo "=== TOOLCHAIN ==="    
+              set -x
+              which aarch64-linux-gnu-gcc
+              echo "which exit=$?"
+              dpkg -l | grep gcc-aarch64
+              echo "dpkg exit=$?"
+              find /usr/bin -name '*aarch64*'
+              find /usr/bin -name '*gcc*' | grep aarch64
+              env | grep RELENG
+              set +x
+              echo "=== BUILD ==="
+              apt-cache policy gcc-aarch64-linux-gnu
+              dpkg -l | grep aarch64
+              ls /usr/bin/aarch64-linux-gnu-*
+              releng-build-package
+            '
+            
+      - name: Show generated files
+        run: ls -lah buildd-results  
+        
       - name: Delete latest release
         run: |
           gh release delete latest --yes --cleanup-tag || true
@@ -57,6 +71,10 @@ jobs:
         with:
           tag_name: "latest"
           name: "Latest droidian-apex-manager build"
-          files: /tmp/results/*.deb
+          files: |
+            buildd-results/*.deb
+            buildd-results/*.ddeb
+            buildd-results/*.changes
+            buildd-results/*.buildinfo
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
